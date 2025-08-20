@@ -1,0 +1,45 @@
+---
+- name: Generate usage report for every AI services used in Azure Tenant
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    date: "{{ lookup('pipe', 'TZ=Asia/Kuala_Lumpur date +%F')  }}"
+    job_id: "{{ tower_job_id }}"
+    outfile_path: "/tmp/ai-usage_{{ scan_type }}_{{ date }}"
+
+  tasks:
+  - name: Run AI Usage report python script
+    ansible.builtin.script:
+      cmd: scripts/SC-gather_report-azure_ai_usage.py {{ job_id }} {{ scan_type }} {{ outfile_path }}
+    become: true
+
+  - block:
+    - name: Email AI Usage report
+      mail:
+        subject: "[AI Usage {{ scan_type }} report] {{ date }} [Job ID: {{ job_id }}]"
+        host: "{{ email.host }}"
+        to: "{{ email.toAddr }}"
+        cc: "{{ email.ccAddr }}"
+        from: "{{ email.fromAddr }}"
+        headers:
+          - Reply-To = "{{ email.replyAddr }}"
+        port: "{{ email.port }}"
+        body: |
+          Please find the {{ scan_type }} AI Usage report attached.
+        attach:
+          - "{{ outfile_path }}.zip"
+          - "{{ outfile_path }}.xlsx"
+
+    always:
+    - name: Remove generated Zip and excel report
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - "{{ outfile_path }}.zip"
+        - "{{ outfile_path }}.xlsx"
+
+    run_once: true
+    become: true
+
